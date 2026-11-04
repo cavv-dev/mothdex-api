@@ -1,4 +1,7 @@
-# Crocdb API
-Official API for Crocdb Database
+# Mothdex API
+Official API for accessing the Mothdex's database
 
-[Public API documentation](https://github.com/cavv-dev/crocdb-api/blob/main/API_DOCUMENTATION.md)
+- `api.py` contains the actual API logic for database access
+- `app.py` is the Flask app that makes the API accessible on HTTP
+
+[Public HTTP API docs](https://mothdex.net/api-docs/) (mirrors [API_DOCUMENTATION.md](https://github.com/cavv-dev/mothdex-api/blob/main/API_DOCUMENTATION.md))

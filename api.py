@@ -1,80 +1,64 @@
-"""
-This module provides an API for interacting with the Crocdb SQLite database containing information about ROM entries, platforms, and regions. 
-It includes functions for searching entries, retrieving specific entries, and fetching metadata about the database.
-"""
 import sqlite3
 import os
-import re
-from unidecode import unidecode
 from functools import wraps
-from typing import Optional, List, Dict, Any
+from unidecode import unidecode
+
+try:
+    from .db.utils import create_db_search_key, normalize_repeated_chars, replace_invalid_chars
+except ImportError:
+    from db.utils import create_db_search_key, normalize_repeated_chars, replace_invalid_chars
 
 DB_PATH = os.path.join(os.path.dirname(
     os.path.realpath(__file__)), 'db', 'roms.db')
 
 
-def normalize_repeated_chars(text: str, char: str) -> str:
-    """Replace consecutive occurrences of a character with a single instance."""
-    escaped_char = re.escape(char)  # Escape special characters for regex
-    return re.sub(f'{escaped_char}+', char, text).strip()
-
-
-def replace_invalid_chars(title: str) -> str:
-    """Replace invalid characters in a string with valid substitutes."""
-    for value1, value2 in {
-        '+': 'plus',
-        '&': 'and',
-        '™': '',
-        '©': '',
-        '®': ''
-    }.items():
-        title = title.replace(value1, f' {value2} ')
-    return title
-
-
-def get_valid_search_key(search_key: str) -> str:
-    """Process the input search key by performing a series of transformations to ensure it is valid."""
+def get_valid_search_key(search_key):
+    """Process a user search string before passing it to the API search."""
     search_key = replace_invalid_chars(search_key)
     search_key = unidecode(search_key)
-    search_key = normalize_repeated_chars(search_key, ' ')
-    search_key = search_key.strip()
-    return search_key
+    return normalize_repeated_chars(search_key, ' ')
 
 
-def create_db_search_key(title: str) -> str:
-    """Create a search key by transforming a string using the same format used in the database"""
-    title = get_valid_search_key(title)
-    title = title.lower()
-    title = re.sub(r"[^a-z0-9]", '', title)
-    title = title.strip()
-    return title
-
-
-def prepare_search_key(search_key: str) -> str:
-    """Make the given string safe for use in a SQL MATCH operator."""
+def prepare_search_key(search_key):
+    """Make the given string safe for use in a SQL MATCH operator and apply prefix matching."""
     words = search_key.split()
-    escaped_words = [word.replace('"', r'""') for word in words]
-    quoted_words = [f'"{word}"' for word in escaped_words]
-    return ' '.join(quoted_words)
+    if not words:
+        return ''
+
+    escaped_words = [word.replace('"', '""') for word in words]
+
+    quoted_words = [f'"{word}"' for word in escaped_words[:-1]
+                    ] + [f'"{escaped_words[-1]}"*']
+    spaced_query = ' '.join(quoted_words)
+
+    if len(words) > 1:
+        solid_word = ''.join(escaped_words)
+        return f'({spaced_query}) OR "{solid_word}"*'
+
+    return spaced_query
 
 
 def with_db(func):
     """Decorator that provides a read-only database connection and cursor to a function."""
     @wraps(func)
     def wrapper(*args, **kwargs):
-        con = sqlite3.connect(f'file:{DB_PATH}?mode=ro', uri=True)
-        con.row_factory = sqlite3.Row
-        cur = con.cursor()
+        """Open a read-only database connection for the wrapped function."""
+        conn = None
+        cursor = None
         try:
-            result = func(cur, *args, **kwargs)
+            conn = sqlite3.connect(
+                f'file:{DB_PATH}?mode=ro', uri=True, timeout=5)
+            conn.row_factory = sqlite3.Row
+            cursor = conn.cursor()
+            result = func(cursor, *args, **kwargs)
         finally:
-            cur.close()
-            con.close()
+            cursor.close()
+            conn.close()
         return result
     return wrapper
 
 
-def build_response(info: Optional[Dict[str, Any]] = None, data: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+def build_response(info=None, data=None):
     """Build the universal response structure used in the API."""
     return {
         'info': info or {},
@@ -82,10 +66,63 @@ def build_response(info: Optional[Dict[str, Any]] = None, data: Optional[Dict[st
     }
 
 
+def build_link(cursor, row):
+    """Convert a link row into the public link structure."""
+    cursor.execute('''
+        SELECT extra FROM extras_links
+        WHERE link = ?
+    ''', (row['id'],))
+    extras = [extra[0] for extra in cursor.fetchall()]
+
+    link = {
+        'type': row['type'],
+        'extras': extras,
+        'format': row['format'],
+        'filename': row['filename'],
+        'url': row['url'],
+        'size': row['size'],
+        'size_str': row['size_str'],
+        'source_name': row['source_name'],
+        'source_url': row['source_url']
+    }
+
+    return link
+
+
+def build_entry(cursor, row):
+    """Convert an entry row into the public entry structure."""
+    cursor.execute('''
+        SELECT region FROM regions_entries
+        WHERE entry = ?
+    ''', (row['slug'],))
+    regions = [region[0] for region in cursor.fetchall()]
+
+    cursor.execute('''
+        SELECT *
+        FROM links
+        WHERE entry = ?
+    ''', (row['slug'],))
+    links = []
+    for link_row in cursor.fetchall():
+        links.append(build_link(cursor, link_row))
+
+    entry = {
+        'slug': row['slug'],
+        'title': row['title'],
+        'platform': row['platform'],
+        'regions': regions,
+        'serial': row['serial'],
+        'cover_url': row['cover_url'],
+        'links': links
+    }
+    return entry
+
+
 def handle_exception(func):
     """Decorator that handles exceptions for all API endpoints."""
     @wraps(func)
     def wrapper(*args, **kwargs):
+        """Return a standard error response when the wrapped function fails."""
         try:
             return func(*args, **kwargs)
         except sqlite3.OperationalError:
@@ -99,61 +136,59 @@ def handle_exception(func):
     return wrapper
 
 
-@with_db
 @handle_exception
+@with_db
 def get_search(
-    cur: sqlite3.Cursor,
-    search_key: Optional[str] = None,
-    platforms: Optional[List[str]] = None,
-    regions: Optional[List[str]] = None,
-    rom_id: Optional[str] = None,  # Added rom_id parameter
-    max_results: int = 100,
-    page: int = 1
-) -> Dict[str, Any]:
+    cursor,
+    search_key=None,
+    platforms=None,
+    regions=None,
+    serial=None,
+    max_results=100,
+    page=1
+):
     """Perform a search using given filters."""
     platforms = platforms or []
     regions = regions or []
-    # Ensure max_results is between 1 and 100
     max_results = max(1, min(max_results, 100))
-    page = max(1, page)  # Ensure page is at least 1
+    page = max(1, page)
 
-    base_query = """
-    SELECT DISTINCT e.slug, e.rom_id, e.title, e.platform, e.boxart_url
+    base_query = '''
+    SELECT DISTINCT *
     FROM entries e
-    """
+    '''
     where_clauses = []
     params = []
 
     if search_key:
-        prepared_search_key = prepare_search_key(search_key)
-        base_query += " JOIN entries_fts fts ON fts.rowid = e.rowid "
-        where_clauses.append("fts.search_key MATCH ?")
+        valid_search_key = get_valid_search_key(search_key)
+        prepared_search_key = prepare_search_key(valid_search_key)
+        base_query += ' JOIN entries_fts fts ON fts.rowid = e.rowid '
+        where_clauses.append('fts.search_key MATCH ?')
         params.append(prepared_search_key)
 
     if platforms:
         placeholders = ','.join(['?' for _ in platforms])
-        where_clauses.append(f"e.platform IN ({placeholders})")
+        where_clauses.append(f'e.platform IN ({placeholders})')
         params.extend(platforms)
 
     if regions:
-        base_query += """
-        LEFT JOIN regions_entries re ON re.entry = e.slug
-        """
-        where_clauses.append("(re.region IN ({}) OR re.region IS NULL)".format(
+        base_query += 'LEFT JOIN regions_entries re ON re.entry = e.slug'
+        where_clauses.append('(re.region IN ({}) OR re.region IS NULL)'.format(
             ','.join(['?' for _ in regions])
         ))
         params.extend(regions)
 
-    if rom_id:
-        where_clauses.append("e.rom_id = ?")
-        params.append(rom_id)
+    if serial:
+        where_clauses.append('e.serial = ?')
+        params.append(serial)
 
     if where_clauses:
-        base_query += " WHERE " + " AND ".join(where_clauses)
+        base_query += ' WHERE ' + ' AND '.join(where_clauses)
 
-    count_query = f"SELECT COUNT(*) FROM ({base_query})"
-    cur.execute(count_query, params)
-    total_results = cur.fetchone()[0]
+    count_query = f'SELECT COUNT(*) FROM ({base_query})'
+    cursor.execute(count_query, params)
+    total_results = cursor.fetchone()[0]
 
     total_pages = (total_results + max_results -
                    1) // max_results if max_results > 0 else 1
@@ -161,34 +196,20 @@ def get_search(
     offset = (page - 1) * max_results
 
     if search_key:
-        db_search_key = create_db_search_key(search_key)
+        search_match_key = create_db_search_key(valid_search_key)
         final_query = base_query + \
-            f" ORDER BY (fts.search_key LIKE ? || '%') DESC LIMIT ? OFFSET ?"
-        params_with_pagination = params + [db_search_key, max_results, offset]
+            ' ORDER BY CASE WHEN e.search_key = ? THEN 0 WHEN e.search_key LIKE ? THEN 1 ELSE 2 END, length(e.search_key), fts.rank LIMIT ? OFFSET ?'
+        params_with_pagination = params + \
+            [search_match_key, f'{search_match_key}%', max_results, offset]
     else:
-        final_query = base_query + " LIMIT ? OFFSET ?"
+        final_query = base_query + ' LIMIT ? OFFSET ?'
         params_with_pagination = params + [max_results, offset]
 
-    cur.execute(final_query, params_with_pagination)
+    cursor.execute(final_query, params_with_pagination)
     results = []
 
-    for row in cur.fetchall():
-        entry = dict(row)
-
-        cur.execute("""
-            SELECT region FROM regions_entries
-            WHERE entry = ?
-        """, (entry['slug'],))
-        entry['regions'] = [region[0] for region in cur.fetchall()]
-
-        cur.execute("""
-            SELECT name, type, format, url, filename, host, size, size_str, source_url
-            FROM links
-            WHERE entry = ?
-        """, (entry['slug'],))
-        entry['links'] = [dict(link_row) for link_row in cur.fetchall()]
-
-        results.append(entry)
+    for row in cursor.fetchall():
+        results.append(build_entry(cursor, row))
 
     return build_response(
         {},
@@ -202,79 +223,63 @@ def get_search(
     )
 
 
-@with_db
 @handle_exception
-def get_entry(cur: sqlite3.Cursor, slug: Optional[str] = None, random: bool = False) -> Dict[str, Any]:
+@with_db
+def get_entry(cursor, slug=None, random=False):
     """Select an entry directly by its slug or get a random entry."""
     if random:
-        cur.execute("""
-            SELECT slug, rom_id, title, platform, boxart_url
+        cursor.execute('''
+            SELECT *
             FROM entries
             ORDER BY RANDOM()
             LIMIT 1
-        """)
-        row = cur.fetchone()
-        if not row:
-            return build_response()
-        entry = dict(row)
+        ''')
+        row = cursor.fetchone()
     else:
         if not slug:
             return build_response({'error': 'Slug is required'})
-        cur.execute("""
-            SELECT slug, rom_id, title, platform, boxart_url
+        cursor.execute('''
+            SELECT *
             FROM entries
             WHERE slug = ?
-        """, (slug,))
-        row = cur.fetchone()
+        ''', (slug,))
+        row = cursor.fetchone()
         if not row:
             return build_response({'error': 'Entry not found'})
-        entry = dict(row)
-
-    cur.execute("""
-        SELECT region FROM regions_entries
-        WHERE entry = ?
-    """, (entry['slug'],))
-    entry['regions'] = [region[0] for region in cur.fetchall()]
-
-    cur.execute("""
-        SELECT name, type, format, url, filename, host, size, size_str, source_url
-        FROM links
-        WHERE entry = ?
-    """, (entry['slug'],))
-    entry['links'] = [dict(link_row) for link_row in cur.fetchall()]
+    entry = build_entry(cursor, row)
 
     return build_response({}, {'entry': entry})
 
 
-@with_db
 @handle_exception
-def get_platforms(cur: sqlite3.Cursor) -> Dict[str, Any]:
+@with_db
+def get_platforms(cursor):
     """Get the available platforms in the database."""
-    cur.execute("""
-        SELECT id, brand, name
+    cursor.execute('''
+        SELECT *
         FROM platforms
-    """)
-    platforms = {id: {'brand': brand, 'name': name}
-                 for id, brand, name in cur.fetchall()}
+    ''')
+    platforms = {id: {'class': platform_class, 'brand': brand, 'name': name}
+                 for id, platform_class, brand, name in cursor.fetchall()}
     return build_response({}, {'platforms': platforms})
 
 
-@with_db
 @handle_exception
-def get_regions(cur: sqlite3.Cursor) -> Dict[str, Any]:
+@with_db
+def get_regions(cursor):
     """Get the available regions in the database."""
-    cur.execute("""
-        SELECT id, name
+    cursor.execute('''
+        SELECT *
         FROM regions
-    """)
-    regions = {id: name for id, name in cur.fetchall()}
+    ''')
+    regions = {id: name for id, name in cursor.fetchall()}
     return build_response({}, {'regions': regions})
 
 
-@with_db
 @handle_exception
-def get_info(cur: sqlite3.Cursor) -> Dict[str, Any]:
+@with_db
+def get_info(cursor):
     """Get information on the current state of the database."""
-    cur.execute("SELECT COUNT(*) FROM entries")
-    total_entries = cur.fetchone()[0]
+    cursor.execute('SELECT COUNT(*) FROM entries')
+    total_entries = cursor.fetchone()[0]
     return build_response({}, {'total_entries': total_entries})

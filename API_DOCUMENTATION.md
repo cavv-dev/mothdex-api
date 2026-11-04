@@ -1,197 +1,260 @@
-# Crocdb API Documentation
+# Mothdex API
 
-The Crocdb API provides access to the database of ROM entries, platforms and regions. The API is hosted at `https://api.crocdb.net` and is publicly accessible.
+The Mothdex API provides read-only access to the Mothdex ROM database through HTTP/JSON requests. Authentication is not required.
 
-## Response Format
+Base URL: `https://api.mothdex.net/v1`
 
-All API endpoints return responses in the following JSON format:
+## Index
 
-```jsonc
-{
-  "info": {
-    // Information about the request or error messages
-  },
-  "data": {
-    // The actual data returned by the endpoint
-  }
-}
-```
+- [Response format](#response-format)
+- [Data fields](#data-fields)
+    - [Entry](#entry)
+    - [Link](#link)
+- [Endpoints](#endpoints)
+    - [Search entries](#search-entries)
+    - [Get entry](#get-entry)
+    - [Get random entry](#get-random-entry)
+    - [List platforms](#list-platforms)
+    - [List regions](#list-regions)
+    - [Database information](#database-information)
+- [Status codes](#status-codes)
+- [Limits and CORS](#limits-and-cors)
 
-## Endpoints
+## Response format
 
-### Search Entries
-
-Searches for ROM entries using various filters.
-
-- **URL**: `/search`
-- **Method**: `POST`
-- **Request Body**:
-
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| search_key | string | No | Search term to find matching entries |
-| platforms | array of strings | No | List of platform IDs to filter by |
-| regions | array of strings | No | List of region IDs to filter by |
-| rom_id | string | No | Filter by specific ROM ID |
-| max_results | integer | No | Maximum number of results per page (default: 100, max: 100) |
-| page | integer | No | Page number for pagination (default: 1) |
-
-- **Example Request**:
+Every response uses the same top-level JSON object:
 
 ```json
 {
-  "search_key": "mario",
-  "platforms": ["snes", "n64"],
-  "regions": ["us", "eu"],
-  "max_results": 50,
+  "info": {},
+  "data": {}
+}
+```
+
+`data` contains the actual data returned by the endpoint.
+
+`info` is normally empty. It may contain an `error` message when the API reports an error.
+
+Some application-level errors, such as a missing entry, keep the HTTP response successful (see [Status codes](#status-codes)) but put the error in `info`; always check both the HTTP status and the presence of `error` in `info`.
+
+## Data fields
+
+### Entry
+
+An entry describes one database item:
+
+| Field | Type | Description |
+|---|---|---|
+| `slug` | string | Stable identifier used with `/entry`. |
+| `title` | string | Entry title. |
+| `platform` | string | Platform identifier, such as `snes` or `gba`. See [`/platforms`](#list-platforms). |
+| `regions` | array of strings | Region identifiers associated with the entry. See [`/regions`](#list-regions). |
+| `serial` | string | Platform serial or catalog identifier, when available. |
+| `cover_url` | string | URL of the cover artwork, when available. |
+| `links` | array of links (see [Link](#link)) | Download links associated with the entry. |
+
+### Link
+
+Each object in `links` contains:
+
+| Field | Type | Description |
+|---|---|---|
+| `type` | string | Link category, for example `Game`. |
+| `extras` | array of strings | Additional languages, revisions, or other source metadata. |
+| `format` | string | File or content format, such as `gba` or `bin+cue`. |
+| `filename` | string | Name of the downloaded file. |
+| `url` | string | Direct URL used to access the file. |
+| `size` | integer | File size in bytes. |
+| `size_str` | string | Human-readable file size. |
+| `source_name` | string | Name of the source. |
+| `source_url` | string | URL of the source collection or page. |
+
+## Endpoints
+
+### Search entries
+
+Searches entries with optional filters.
+
+#### `/search` `POST`
+
+Request body:
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `search_key` | string | No | Case-insensitive text search applied to the title. It does not need to be an exact match: partial matches and substrings are supported. |
+| `platforms` | array of strings | No | Platform identifiers to include, such as `["snes", "gba"]`. |
+| `regions` | array of strings | No | Region identifiers to include, such as `["us", "jp"]`. |
+| `serial` | string | No | Exact ROM serial filter. |
+| `max_results` | integer | No | Results per page. Default: `100`. Max: `100`. |
+| `page` | integer | No | Page number, starting at `1`. Defaults to `1`. |
+
+All fields are optional. An empty body (`{}`) is valid and returns the first page of entries.
+
+Example request body:
+
+```json
+{
+  "search_key": "moth",
+  "platforms": ["snes", "gba"],
+  "regions": ["us", "jp"],
+  "max_results": 10,
   "page": 1
 }
 ```
 
-- **Response**:
+Example response:
 
-```jsonc
+```json
 {
   "info": {},
   "data": {
     "results": [
       {
-        "slug": "mario-is-missing-snes-eu",
-        "rom_id": null,
-        "title": "Mario Is Missing!",
-        "platform": "snes",
-        "boxart_url": "https://thumbnails.libretro.com/Nintendo%20-%20Super%20Nintendo%20Entertainment%20System/Named_Boxarts/Mario%20Is%20Missing%21%20%28Europe%29.png",
+        "slug": "mother-3-gba-jp",
+        "title": "Mother 3",
+        "platform": "gba",
+        "serial": "A3UJ",
+        "cover_url": "https://thumbnails.libretro.com/Nintendo%20-%20Game%20Boy%20Advance/Named_Boxarts/Mother%203%20%28Japan%29.png",
         "regions": [
-          "eu"
+          "jp"
         ],
         "links": [
           {
-            "name": "Mario Is Missing! (Europe)",
             "type": "Game",
-            "format": "sfc",
-            "url": "https://myrient.erista.me/files/No-Intro/Nintendo%20-%20Super%20Nintendo%20Entertainment%20System/Mario%20Is%20Missing%21%20%28Europe%29.zip",
-            "filename": "Mario Is Missing! (Europe).zip",
-            "host": "Myrient",
-            "size": 925491,
-            "size_str": "903.8K",
-            "source_url": "https://myrient.erista.me/files/No-Intro/Nintendo%20-%20Super%20Nintendo%20Entertainment%20System/"
+            "format": "gba",
+            "filename": "Mother 3 (Japan).zip",
+            "url": "https://proxy.mothdex.net/file/eT4hhOnrH9",
+            "size": 15449059,
+            "size_str": "14.73M",
+            "source_name": "MiNERVA Archive",
+            "source_url": "https://minerva-archive.org/browse/No-Intro/Nintendo%20-%20Game%20Boy%20Advance/"
           },
-          // ...
+          ...
         ]
       },
-      // ...
+      ...
     ],
-    "current_results": 50,
-    "total_results": 75,
+    "current_results": 5,
+    "total_results": 5,
     "current_page": 1,
-    "total_pages": 2
+    "total_pages": 1
   }
 }
 ```
 
-### Get Entry
+Returned fields:
 
-Retrieves a specific entry by its slug identifier.
+| Field | Type | Description |
+|---|---|---|
+| `results` | array of entries (see [Entry](#entry)) | Entries returned for this page. |
+| `current_results` | integer | Number of entries in `results`. |
+| `total_results` | integer | Total number of entries. |
+| `current_page` | integer | Current page number. |
+| `total_pages` | integer | Number of available pages. |
 
-- **URL**: `/entry`
-- **Method**: `POST`
-- **Request Body**:
+If `page` is greater than the last page, the last page is returned. Values below `1` are treated as page `1`.
 
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| slug | string | Yes | The unique slug identifier for the entry |
+### Get entry
 
-- **Example Request**:
+#### `/entry` `POST`
+
+Example request body:
 
 ```json
 {
-  "slug": "croc-legend-of-the-gobbos-ps1-us"
+  "slug": "um-jammer-lammy-ps1-eu"
 }
 ```
 
-- **Response**:
+Example response:
 
-```jsonc
+```json
 {
   "info": {},
   "data": {
     "entry": {
-      "slug": "croc-legend-of-the-gobbos-ps1-us",
-      "rom_id": "SLUS-00530",
-      "title": "Croc - Legend of the Gobbos",
+      "slug": "um-jammer-lammy-ps1-eu",
+      "title": "Um Jammer Lammy",
       "platform": "ps1",
-      "boxart_url": "https://thumbnails.libretro.com/Sony%20-%20PlayStation/Named_Boxarts/Croc%20-%20Legend%20of%20the%20Gobbos%20%28USA%29.png",
       "regions": [
-        "us"
+        "eu"
       ],
+      "serial": "SCES-01753",
+      "cover_url": "https://images.igdb.com/igdb/image/upload/t_cover_big/coa4lg.jpg",
       "links": [
         {
-          "name": "Croc - Legend of the Gobbos (USA)",
           "type": "Game",
-          "format": "bin/cue",
-          "url": "https://myrient.erista.me/files/Redump/Sony%20-%20PlayStation/Croc%20-%20Legend%20of%20the%20Gobbos%20%28USA%29.zip",
-          "filename": "Croc - Legend of the Gobbos (USA).zip",
-          "host": "Myrient",
-          "size": 388392550,
-          "size_str": "370.4M",
-          "source_url": "https://myrient.erista.me/files/Redump/Sony%20-%20PlayStation/"
+          "extras": ["En", "Fr", "De", "Es", "It"],
+          "format": "bin+cue",
+          "filename": "Um Jammer Lammy (Europe) (En,Fr,De,Es,It).zip",
+          "url": "https://proxy.mothdex.net/file/4oLHprC3PV",
+          "size": 568208710,
+          "size_str": "541.89M",
+          "source_name": "MiNERVA Archive",
+          "source_url": "https://minerva-archive.org/browse/Redump/Sony%20-%20PlayStation/"
         },
-        // ...
+        ...
       ]
     }
   }
 }
 ```
 
-### Random Entry
+### Get random entry
 
-Returns a randomly selected entry from the database.
+#### `/entry/random` `GET` `POST`
 
-- **URL**: `/entry/random`
-- **Methods**: `POST`, `GET`
-- **Request Body**: None required
-- **Response**: Same format as the `/entry` endpoint
+No request body is required.
 
-### Available Platforms
+The response has the same shape as [`/entry`](#get-entry).
 
-Returns a list of all available platforms in the database.
+### List platforms
 
-- **URL**: `/platforms`
-- **Methods**: `POST`, `GET`
-- **Request Body**: None required
-- **Response**:
+#### `/platforms` `GET` `POST`
 
-```jsonc
+No request body is required.
+
+Example response:
+
+```json
 {
   "info": {},
   "data": {
     "platforms": {
       "nes": {
+        "class": "Home consoles",
         "brand": "Nintendo",
         "name": "Nintendo Entertainment System"
       },
       "fds": {
+        "class": "Home consoles",
         "brand": "Nintendo",
         "name": "Famicom Disk System"
       },
       "snes": {
+        "class": "Home consoles",
         "brand": "Nintendo",
         "name": "Super Nintendo Entertainment System"
       },
-      // ...
+      ...
     }
   }
 }
 ```
 
-### Available Regions
+The `platforms` object maps each platform identifier, such as `nes`, `fds`, or `snes`.
 
-Returns a list of all available regions in the database.
+Each platform value contains `class` (the broad platform category), `brand` (the manufacturer or platform brand), and `name` (the full human-readable platform name).
 
-- **URL**: `/regions`
-- **Methods**: `POST`, `GET`
-- **Request Body**: None required
-- **Response**:
+Use the identifier as a value in the `platforms` search filter and as the `platform` value returned on an entry.
+
+### List regions
+
+#### `/regions` `GET` `POST`
+
+No request body is required.
+
+Example response:
 
 ```json
 {
@@ -207,37 +270,42 @@ Returns a list of all available regions in the database.
 }
 ```
 
-### Database Information
+The `regions` object maps each region identifier, such as `eu`, `us`, `jp`, or `other`, to its human-readable name.
 
-Returns general information about the database.
+Use the identifier as a value in the `regions` search filter and as a value in an entry's `regions` array.
 
-- **URL**: `/info`
-- **Methods**: `POST`, `GET`
-- **Request Body**: None required
-- **Response**:
+### Database information
+
+#### `/info` `GET` `POST`
+
+No request body is required.
+
+Example response:
 
 ```json
 {
   "info": {},
   "data": {
-    "total_entries": 152241
+    "total_entries": 346298
   }
 }
 ```
 
-## Error Handling
+`total_entries` is the current number of entries in the database and may change as the database is updated.
 
-If an error occurs, the API will return an appropriate HTTP status code along with an error message in the `info` object:
+## Status codes
 
-```json
-{
-  "info": {
-    "error": "An unexpected error occurred"
-  },
-  "data": {}
-}
-```
+Common HTTP statuses:
 
-## CORS Support
+| Status | Meaning |
+|---|---|
+| `200` | Request completed. Always check `error` in `info` for application-level errors. |
+| `400` | Invalid API version, malformed JSON, or invalid/missing request fields. |
+| `404` | The requested route does not exist. |
+| `429` | Rate limit exceeded. |
+| `500` | Unexpected server error. |
 
-The API supports Cross-Origin Resource Sharing (CORS) with all origins allowed.
+## Limits and CORS
+
+- Requests are subject to rate limits. Please use the API responsibly and do not abuse it.
+- CORS is enabled for all origins (`Access-Control-Allow-Origin: *`).

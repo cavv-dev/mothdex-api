@@ -1,13 +1,10 @@
-"""
-This module implements a Flask-based API for interacting with the Crocdb database. It includes endpoints for
-searching, retrieving entries, and fetching metadata about platforms, regions, and the database itself.
-The API also incorporates rate limiting and error handling.
-"""
 from flask import Flask, request, jsonify
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 from http import HTTPStatus
 import api
+
+VALID_API_VERSIONS = ('v1',)
 
 app = Flask(__name__)
 app.json.sort_keys = False
@@ -17,9 +14,9 @@ limiter = Limiter(
     app=app,
     meta_limits=['15 per hour'],
     default_limits=['30 per 1 second'],
-    storage_uri='memcached://localhost:11211',
+    storage_uri='memcached://localhost:11211' if not app.debug else 'memory://',
     storage_options={},
-    key_prefix='crocdb_api_'
+    key_prefix='mothdex_api_'
 )
 
 
@@ -28,6 +25,15 @@ def add_cors_headers(response):
     """Add CORS headers to every response."""
     response.headers['Access-Control-Allow-Origin'] = '*'
     return response
+
+
+@app.before_request
+def require_api_version():
+    """Reject requests that do not use the supported API version prefix."""
+    valid_prefixes = tuple(
+        f'/{api_version}/' for api_version in VALID_API_VERSIONS)
+    if not request.path.startswith(valid_prefixes):
+        return api.build_response({'error': f"Invalid API version. Use /<version>/. Valid: {', '.join(VALID_API_VERSIONS)}"}), 400
 
 
 @app.errorhandler(Exception)
@@ -51,6 +57,9 @@ def ratelimit_handler(e):
 
 def validate_payload(required_fields, data, field_types=None):
     """Validate that all required fields are present and of correct type in the request payload."""
+    if not isinstance(data, dict):
+        return api.build_response({'error': "Request body must be a JSON object"})
+
     missing_fields = [field for field in required_fields if field not in data]
     if missing_fields:
         return api.build_response({'error': f"Missing required fields: {', '.join(missing_fields)}"})
@@ -63,7 +72,7 @@ def validate_payload(required_fields, data, field_types=None):
     return None
 
 
-@app.route('/search', methods=['POST'])
+@app.route('/v1/search', methods=['POST'])
 def search():
     """API endpoint to perform a search with filters."""
     try:
@@ -78,7 +87,7 @@ def search():
             'search_key': str,
             'platforms': list,
             'regions': list,
-            'rom_id': str,
+            'serial': str,
             'max_results': int,
             'page': int
         }
@@ -89,7 +98,7 @@ def search():
     search_key = data.get('search_key')
     platforms = data.get('platforms', [])
     regions = data.get('regions', [])
-    rom_id = data.get('rom_id')
+    serial = data.get('serial')
     max_results = data.get('max_results', 100)
     page = data.get('page', 1)
 
@@ -97,13 +106,13 @@ def search():
         search_key=search_key,
         platforms=platforms,
         regions=regions,
-        rom_id=rom_id,
+        serial=serial,
         max_results=max_results,
         page=page
     ))
 
 
-@app.route('/entry', methods=['POST'])
+@app.route('/v1/entry', methods=['POST'])
 def entry():
     """API endpoint to retrieve a specific entry by slug."""
     try:
@@ -120,28 +129,28 @@ def entry():
         return validation_error, 400
 
     slug = data['slug']
-    return jsonify(api.get_entry(slug=slug, random=False))
+    return jsonify(api.get_entry(slug))
 
 
-@app.route('/entry/random', methods=['POST', 'GET'])
+@app.route('/v1/entry/random', methods=['POST', 'GET'])
 def random_entry():
     """API endpoint to retrieve a random entry."""
-    return jsonify(api.get_entry(slug=None, random=True))
+    return jsonify(api.get_entry(random=True))
 
 
-@app.route('/platforms', methods=['POST', 'GET'])
+@app.route('/v1/platforms', methods=['POST', 'GET'])
 def platforms():
     """API endpoint to retrieve the list of available platforms."""
     return jsonify(api.get_platforms())
 
 
-@app.route('/regions', methods=['POST', 'GET'])
+@app.route('/v1/regions', methods=['POST', 'GET'])
 def regions():
     """API endpoint to retrieve the list of available regions."""
     return jsonify(api.get_regions())
 
 
-@app.route('/info', methods=['POST', 'GET'])
+@app.route('/v1/info', methods=['POST', 'GET'])
 def info():
     """API endpoint to retrieve information about the database."""
     return jsonify(api.get_info())
