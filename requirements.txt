@@ -1,3 +1,4 @@
 flask
 unidecode
 Flask-Limiter[memcached]
+gunicorn
