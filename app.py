@@ -2,12 +2,19 @@ from flask import Flask, request, jsonify
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 from http import HTTPStatus
+from werkzeug.middleware.proxy_fix import ProxyFix
 import api
 
 VALID_API_VERSIONS = ('v1',)
 
 app = Flask(__name__)
 app.json.sort_keys = False
+app.wsgi_app = ProxyFix(
+    app.wsgi_app,
+    x_for=1,
+    x_proto=1,
+    x_host=1,
+)
 
 limiter = Limiter(
     get_remote_address,
