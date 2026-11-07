@@ -139,10 +139,34 @@ def entry():
     return jsonify(api.get_entry(slug))
 
 
-@app.route('/v1/entry/random', methods=['POST', 'GET'])
+@app.route('/v1/entry/random', methods=['POST'])
 def random_entry():
-    """API endpoint to retrieve a random entry."""
-    return jsonify(api.get_entry(random=True))
+    """API endpoint to retrieve a random entry matching optional filters."""
+    try:
+        data = request.get_json(force=True)
+    except Exception:
+        return api.build_response({'error': "Malformed JSON in request body"}), 400
+
+    validation_error = validate_payload(
+        [],
+        data,
+        field_types={
+            'search_key': str,
+            'platforms': list,
+            'regions': list,
+            'serial': str
+        }
+    )
+    if validation_error:
+        return validation_error, 400
+
+    return jsonify(api.get_entry(
+        random=True,
+        search_key=data.get('search_key'),
+        platforms=data.get('platforms', []),
+        regions=data.get('regions', []),
+        serial=data.get('serial')
+    ))
 
 
 @app.route('/v1/platforms', methods=['POST', 'GET'])

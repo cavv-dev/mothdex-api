@@ -118,6 +118,58 @@ def build_entry(cursor, row):
     return entry
 
 
+def build_entries_query(search_key=None, platforms=None, regions=None, serial=None):
+    """Build the shared filtered entries query and its parameters."""
+    platforms = platforms or []
+    regions = regions or []
+    base_query = '''
+    SELECT *
+    FROM entries e
+    '''
+    where_clauses = []
+    params = []
+    valid_search_key = None
+
+    if search_key:
+        valid_search_key = get_valid_search_key(search_key)
+        prepared_search_key = prepare_search_key(valid_search_key)
+        base_query += ' JOIN entries_fts fts ON fts.rowid = e.rowid '
+        where_clauses.append('fts.search_key MATCH ?')
+        params.append(prepared_search_key)
+
+    if platforms:
+        placeholders = ','.join(['?' for _ in platforms])
+        where_clauses.append(f'e.platform IN ({placeholders})')
+        params.extend(platforms)
+
+    if regions:
+        placeholders = ','.join(['?' for _ in regions])
+        where_clauses.append('''(
+            EXISTS (
+                SELECT 1 FROM regions_entries re
+                WHERE re.entry = e.slug AND re.region IN ({})
+            )
+            OR EXISTS (
+                SELECT 1 FROM regions_entries re
+                WHERE re.entry = e.slug AND re.region IS NULL
+            )
+            OR NOT EXISTS (
+                SELECT 1 FROM regions_entries re
+                WHERE re.entry = e.slug
+            )
+        )'''.format(placeholders))
+        params.extend(regions)
+
+    if serial:
+        where_clauses.append('e.serial = ?')
+        params.append(serial)
+
+    if where_clauses:
+        base_query += ' WHERE ' + ' AND '.join(where_clauses)
+
+    return base_query, params, valid_search_key
+
+
 def handle_exception(func):
     """Decorator that handles exceptions for all API endpoints."""
     @wraps(func)
@@ -153,38 +205,8 @@ def get_search(
     max_results = max(1, min(max_results, 100))
     page = max(1, page)
 
-    base_query = '''
-    SELECT DISTINCT *
-    FROM entries e
-    '''
-    where_clauses = []
-    params = []
-
-    if search_key:
-        valid_search_key = get_valid_search_key(search_key)
-        prepared_search_key = prepare_search_key(valid_search_key)
-        base_query += ' JOIN entries_fts fts ON fts.rowid = e.rowid '
-        where_clauses.append('fts.search_key MATCH ?')
-        params.append(prepared_search_key)
-
-    if platforms:
-        placeholders = ','.join(['?' for _ in platforms])
-        where_clauses.append(f'e.platform IN ({placeholders})')
-        params.extend(platforms)
-
-    if regions:
-        base_query += 'LEFT JOIN regions_entries re ON re.entry = e.slug'
-        where_clauses.append('(re.region IN ({}) OR re.region IS NULL)'.format(
-            ','.join(['?' for _ in regions])
-        ))
-        params.extend(regions)
-
-    if serial:
-        where_clauses.append('e.serial = ?')
-        params.append(serial)
-
-    if where_clauses:
-        base_query += ' WHERE ' + ' AND '.join(where_clauses)
+    base_query, params, valid_search_key = build_entries_query(
+        search_key, platforms, regions, serial)
 
     count_query = f'SELECT COUNT(*) FROM ({base_query})'
     cursor.execute(count_query, params)
@@ -225,15 +247,13 @@ def get_search(
 
 @handle_exception
 @with_db
-def get_entry(cursor, slug=None, random=False):
+def get_entry(cursor, slug=None, random=False, search_key=None, platforms=None,
+              regions=None, serial=None):
     """Select an entry directly by its slug or get a random entry."""
     if random:
-        cursor.execute('''
-            SELECT *
-            FROM entries
-            ORDER BY RANDOM()
-            LIMIT 1
-        ''')
+        query, params, _ = build_entries_query(
+            search_key, platforms, regions, serial)
+        cursor.execute(query + ' ORDER BY RANDOM() LIMIT 1', params)
         row = cursor.fetchone()
     else:
         if not slug:
@@ -244,8 +264,8 @@ def get_entry(cursor, slug=None, random=False):
             WHERE slug = ?
         ''', (slug,))
         row = cursor.fetchone()
-        if not row:
-            return build_response({'error': 'Entry not found'})
+    if not row:
+        return build_response({'error': 'Entry not found'})
     entry = build_entry(cursor, row)
 
     return build_response({}, {'entry': entry})

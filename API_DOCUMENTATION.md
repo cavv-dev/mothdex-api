@@ -202,9 +202,21 @@ Example response:
 
 ### Get random entry
 
-#### `/entry/random` `GET` `POST`
+#### `/entry/random` `POST`
 
-No request body is required.
+Returns one randomly selected entry matching the optional filters. The filter
+fields are the same as [`/search`](#search-entries), limited to
+`search_key`, `platforms`, `regions`, and `serial`.
+
+Provide the filters as a JSON request body. An empty body (`{}`) is valid:
+
+```json
+{
+  "search_key": "mario",
+  "platforms": ["snes", "gba"],
+  "regions": ["us", "jp"]
+}
+```
 
 The response has the same shape as [`/entry`](#get-entry).
 
