@@ -94,9 +94,9 @@ Example request body:
 
 ```json
 {
-  "search_key": "moth",
-  "platforms": ["snes", "gba"],
-  "regions": ["us", "jp"],
+  "search_key": "doom",
+  "platforms": ["dos"],
+  "regions": ["eu", "us"],
   "max_results": 10,
   "page": 1
 }
@@ -110,34 +110,63 @@ Example response:
   "data": {
     "results": [
       {
-        "slug": "mother-3-gba-jp",
-        "title": "Mother 3",
-        "platform": "gba",
-        "serial": "A3UJ",
-        "cover_url": "https://thumbnails.libretro.com/Nintendo%20-%20Game%20Boy%20Advance/Named_Boxarts/Mother%203%20%28Japan%29.png",
-        "regions": [
-          "jp"
-        ],
+        "slug": "doom-1993-dos",
+        "title": "DOOM (1993)",
+        "platform": "dos",
+        "regions": [],
+        "serial": null,
+        "cover_url": "https://images.igdb.com/igdb/image/upload/t_cover_big/co5rav.jpg",
         "links": [
           {
             "type": "Game",
-            "format": "gba",
-            "filename": "Mother 3 (Japan).zip",
-            "url": "https://proxy.mothdex.net/file/eT4hhOnrH9",
-            "size": 15449059,
-            "size_str": "14.73M",
+            "extras": [
+              "Installer",
+              "SW"
+            ],
+            "format": "exe",
+            "filename": "DOOM (Installer) [SW] (1993)(id Software, Inc.) [Action].zip",
+            "url": "https://proxy.mothdex.net/file/54OLVmcrle",
+            "size": 2164841,
+            "size_str": "2.06M",
             "source_name": "MiNERVA Archive",
-            "source_url": "https://minerva-archive.org/browse/No-Intro/Nintendo%20-%20Game%20Boy%20Advance/"
+            "source_url": "https://minerva-archive.org/browse/Total%20DOS%20Collection/Games/Files/"
+          },
+          {
+            "type": "Game",
+            "extras": [
+              "SW"
+            ],
+            "format": "exe",
+            "filename": "DOOM [SW] (1993)(id Software, Inc.) [Action].zip",
+            "url": "https://proxy.mothdex.net/file/lCgkhaYQBb",
+            "size": 2079973,
+            "size_str": "1.98M",
+            "source_name": "MiNERVA Archive",
+            "source_url": "https://minerva-archive.org/browse/Total%20DOS%20Collection/Games/Files/"
+          },
+          {
+            "type": "Game",
+            "extras": [
+              "v0.2",
+              "Alpha"
+            ],
+            "format": "exe",
+            "filename": "DOOM v0.2 Alpha (1993)(id Software, Inc.) [Action].zip",
+            "url": "https://proxy.mothdex.net/file/0s0VD811fj",
+            "size": 261558,
+            "size_str": "255.43K",
+            "source_name": "MiNERVA Archive",
+            "source_url": "https://minerva-archive.org/browse/Total%20DOS%20Collection/Games/Files/"
           },
           ...
         ]
       },
       ...
     ],
-    "current_results": 5,
-    "total_results": 5,
+    "current_results": 10,
+    "total_results": 68,
     "current_page": 1,
-    "total_pages": 1
+    "total_pages": 7
   }
 }
 ```
@@ -162,7 +191,7 @@ Example request body:
 
 ```json
 {
-  "slug": "um-jammer-lammy-ps1-eu"
+  "slug": "phoenix-wright-ace-attorney-nds-eu"
 }
 ```
 
@@ -173,25 +202,40 @@ Example response:
   "info": {},
   "data": {
     "entry": {
-      "slug": "um-jammer-lammy-ps1-eu",
-      "title": "Um Jammer Lammy",
-      "platform": "ps1",
+      "slug": "phoenix-wright-ace-attorney-nds-eu",
+      "title": "Phoenix Wright - Ace Attorney",
+      "platform": "nds",
       "regions": [
         "eu"
       ],
-      "serial": "SCES-01753",
-      "cover_url": "https://images.igdb.com/igdb/image/upload/t_cover_big/coa4lg.jpg",
+      "serial": "AGYP",
+      "cover_url": "https://art.gametdb.com/ds/coverS/EN/AGYP.png",
       "links": [
         {
           "type": "Game",
-          "extras": ["En", "Fr", "De", "Es", "It"],
-          "format": "bin+cue",
-          "filename": "Um Jammer Lammy (Europe) (En,Fr,De,Es,It).zip",
-          "url": "https://proxy.mothdex.net/file/4oLHprC3PV",
-          "size": 568208710,
-          "size_str": "541.89M",
+          "extras": [
+            "De,Es,It"
+          ],
+          "format": "nds",
+          "filename": "Phoenix Wright - Ace Attorney (Europe) (De,Es,It).zip",
+          "url": "https://proxy.mothdex.net/file/7CxnfZ2zNY",
+          "size": 41522301,
+          "size_str": "39.6M",
           "source_name": "MiNERVA Archive",
-          "source_url": "https://minerva-archive.org/browse/Redump/Sony%20-%20PlayStation/"
+          "source_url": "https://minerva-archive.org/browse/No-Intro/Nintendo%20-%20Nintendo%20DS%20%28Decrypted%29/"
+        },
+        {
+          "type": "Game",
+          "extras": [
+            "En,Fr"
+          ],
+          "format": "nds",
+          "filename": "Phoenix Wright - Ace Attorney (Europe) (En,Fr).zip",
+          "url": "https://proxy.mothdex.net/file/niCy6IfrPe",
+          "size": 39948392,
+          "size_str": "38.1M",
+          "source_name": "MiNERVA Archive",
+          "source_url": "https://minerva-archive.org/browse/No-Intro/Nintendo%20-%20Nintendo%20DS%20%28Decrypted%29/"
         },
         ...
       ]
