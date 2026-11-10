@@ -133,8 +133,16 @@ def build_entries_query(search_key=None, platforms=None, regions=None, serial=No
     if search_key:
         valid_search_key = get_valid_search_key(search_key)
         prepared_search_key = prepare_search_key(valid_search_key)
-        base_query += ' JOIN entries_fts fts ON fts.rowid = e.rowid '
-        where_clauses.append('fts.search_key MATCH ?')
+        base_query = '''
+            WITH matched_entries(rowid, rank) AS MATERIALIZED (
+                SELECT rowid, rank
+                FROM entries_fts
+                WHERE search_key MATCH ?
+            )
+            SELECT e.*
+            FROM entries e
+            JOIN matched_entries fts ON fts.rowid = e.rowid
+        '''
         params.append(prepared_search_key)
 
     if platforms:
