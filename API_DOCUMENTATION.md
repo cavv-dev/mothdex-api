@@ -18,6 +18,7 @@ Base URL: `https://api.mothdex.net/v1`
     - [List regions](#list-regions)
     - [Database information](#database-information)
 - [Status codes](#status-codes)
+- [Error codes](#error-codes)
 - [Limits and CORS](#limits-and-cors)
 
 ## Response format
@@ -33,9 +34,19 @@ Every response uses the same top-level JSON object:
 
 `data` contains the actual data returned by the endpoint.
 
-`info` is normally empty. It may contain an `error` message when the API reports an error.
+`info` is normally empty. When the API reports an error, it contains an `error` code and a human-readable `message`:
 
-Some application-level errors, such as a missing entry, keep the HTTP response successful (see [Status codes](#status-codes)) but put the error in `info`; always check both the HTTP status and the presence of `error` in `info`.
+```json
+{
+  "info": {
+    "error": "ENTRY_NOT_FOUND",
+    "message": "Entry not found"
+  },
+  "data": {}
+}
+```
+
+Some application-level errors, such as a missing entry, keep the HTTP response successful (see [Status codes](#status-codes)) but put the error in `info`. Always check both the HTTP status and the presence of `error` in `info`. Use `error` for client-side handling and `message` for display. Validation messages may include details about the specific problem. See [Error codes](#error-codes) for the full reference.
 
 ## Data fields
 
@@ -360,6 +371,23 @@ Common HTTP statuses:
 | `404` | The requested route does not exist. |
 | `429` | Rate limit exceeded. |
 | `500` | Unexpected server error. |
+
+## Error codes
+
+| Code | Meaning |
+|---|---|
+| `INVALID_API_VERSION` | The request path uses an unsupported API version. The message identifies valid versions. |
+| `MALFORMED_JSON` | The request body could not be parsed as JSON. |
+| `INVALID_JSON_OBJECT` | The parsed JSON value is not a JSON object. |
+| `MISSING_REQUIRED_FIELDS` | A required field is absent. The message lists the missing field or fields. |
+| `INVALID_FIELD_TYPE` | A supplied field does not have the required JSON type. The message identifies the field and expected type. |
+| `ENTRY_NOT_FOUND` | No entry matched the supplied slug or filter set. |
+| `INVALID_INPUT` | Database-layer input could not be processed. |
+| `DB_OPERATION_ERROR` | A SQLite operation error occurred. |
+| `DB_ERROR` | A SQLite database error occurred. |
+| `UNEXPECTED_ERROR` | An unhandled application error occurred while processing the request. |
+| `HTTP_ERROR` | An HTTP error was returned. The status code and message identify the exact HTTP error. |
+| `RATE_LIMIT_ERROR` | The request exceeded the rate limit. |
 
 ## Limits and CORS
 

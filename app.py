@@ -40,7 +40,8 @@ def require_api_version():
     valid_prefixes = tuple(
         f'/{api_version}/' for api_version in VALID_API_VERSIONS)
     if not request.path.startswith(valid_prefixes):
-        return api.build_response({'error': f"Invalid API version. Use /<version>/. Valid: {', '.join(VALID_API_VERSIONS)}"}), 400
+        message = f"Invalid API version. Use /<version>/. Valid: {', '.join(VALID_API_VERSIONS)}"
+        return api.build_response(api.build_error('INVALID_API_VERSION', message)), 400
 
 
 @app.errorhandler(Exception)
@@ -53,28 +54,30 @@ def handle_error(e):
             raise e
         app.logger.error(e)
 
-    return api.build_response({'error': HTTPStatus(code).phrase}), code
+    return api.build_response(api.build_error('HTTP_ERROR', HTTPStatus(code).phrase)), code
 
 
 @app.errorhandler(429)
 def ratelimit_handler(e):
     """Handle rate limit errors (HTTP 429)."""
-    return api.build_response({'error': "Too Many Requests"}), 429
+    return api.build_response(api.build_error('RATE_LIMIT_ERROR')), 429
 
 
 def validate_payload(required_fields, data, field_types=None):
     """Validate that all required fields are present and of correct type in the request payload."""
     if not isinstance(data, dict):
-        return api.build_response({'error': "Request body must be a JSON object"})
+        return api.build_response(api.build_error('INVALID_JSON_OBJECT'))
 
     missing_fields = [field for field in required_fields if field not in data]
     if missing_fields:
-        return api.build_response({'error': f"Missing required fields: {', '.join(missing_fields)}"})
+        message = f"Missing required fields: {', '.join(missing_fields)}"
+        return api.build_response(api.build_error('MISSING_REQUIRED_FIELDS', message))
 
     if field_types:
         for field, expected_type in field_types.items():
             if field in data and not isinstance(data[field], expected_type):
-                return api.build_response({'error': f"Field \"{field}\" must be of type {expected_type.__name__}"})
+                message = f"Field \"{field}\" must be of type {expected_type.__name__}"
+                return api.build_response(api.build_error('INVALID_FIELD_TYPE', message))
 
     return None
 
@@ -85,7 +88,7 @@ def search():
     try:
         data = request.get_json(force=True)
     except Exception:
-        return api.build_response({'error': "Malformed JSON in request body"}), 400
+        return api.build_response(api.build_error('MALFORMED_JSON')), 400
 
     validation_error = validate_payload(
         [],
@@ -125,7 +128,7 @@ def entry():
     try:
         data = request.get_json(force=True)
     except Exception:
-        return api.build_response({'error': "Malformed JSON in request body"}), 400
+        return api.build_response(api.build_error('MALFORMED_JSON')), 400
 
     validation_error = validate_payload(
         ['slug'],
@@ -145,7 +148,7 @@ def random_entry():
     try:
         data = request.get_json(force=True)
     except Exception:
-        return api.build_response({'error': "Malformed JSON in request body"}), 400
+        return api.build_response(api.build_error('MALFORMED_JSON')), 400
 
     validation_error = validate_payload(
         [],

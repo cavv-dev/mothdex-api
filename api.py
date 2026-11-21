@@ -11,6 +11,21 @@ except ImportError:
 DB_PATH = os.path.join(os.path.dirname(
     os.path.realpath(__file__)), 'db', 'roms.db')
 
+API_ERRORS = {
+    'DB_OPERATION_ERROR': "Database operation failed",
+    'DB_ERROR': "A database error occurred",
+    'INVALID_INPUT': "Invalid input provided",
+    'UNEXPECTED_ERROR': "An unexpected error occurred",
+    'ENTRY_NOT_FOUND': "Entry not found",
+    'INVALID_API_VERSION': "Invalid API version",
+    'HTTP_ERROR': "HTTP error",
+    'RATE_LIMIT_ERROR': "Too Many Requests",
+    'INVALID_JSON_OBJECT': "Request body must be a JSON object",
+    'MISSING_REQUIRED_FIELDS': "Missing required fields",
+    'INVALID_FIELD_TYPE': "Invalid field type",
+    'MALFORMED_JSON': "Malformed JSON in request body"
+}
+
 
 def get_valid_search_key(search_key):
     """Process a user search string before passing it to the API search."""
@@ -63,6 +78,14 @@ def build_response(info=None, data=None):
     return {
         'info': info or {},
         'data': data or {}
+    }
+
+
+def build_error(error, message=None):
+    """Build a standardized error object with an error code and a human-readable message."""
+    return {
+        'error': error,
+        'message': message or API_ERRORS[error]
     }
 
 
@@ -186,13 +209,13 @@ def handle_exception(func):
         try:
             return func(*args, **kwargs)
         except sqlite3.OperationalError:
-            return build_response({'error': "Database operation failed"})
+            return build_response(build_error('DB_OPERATION_ERROR'))
         except sqlite3.DatabaseError:
-            return build_response({'error': "A database error occurred"})
+            return build_response(build_error('DB_ERROR'))
         except ValueError:
-            return build_response({'error': "Invalid input provided"})
+            return build_response(build_error('INVALID_INPUT'))
         except Exception:
-            return build_response({'error': "An unexpected error occurred"})
+            return build_response(build_error('UNEXPECTED_ERROR'))
     return wrapper
 
 
@@ -265,7 +288,7 @@ def get_entry(cursor, slug=None, random=False, search_key=None, platforms=None,
         row = cursor.fetchone()
     else:
         if not slug:
-            return build_response({'error': 'Slug is required'})
+            return build_response(build_error('MISSING_REQUIRED_FIELDS', "Slug is required"))
         cursor.execute('''
             SELECT *
             FROM entries
@@ -273,7 +296,7 @@ def get_entry(cursor, slug=None, random=False, search_key=None, platforms=None,
         ''', (slug,))
         row = cursor.fetchone()
     if not row:
-        return build_response({'error': 'Entry not found'})
+        return build_response(build_error('ENTRY_NOT_FOUND'))
     entry = build_entry(cursor, row)
 
     return build_response({}, {'entry': entry})

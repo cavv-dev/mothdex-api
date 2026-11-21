@@ -29,4 +29,4 @@ The API base URL has changed and is now versioned:
 
 ## Error handling
 
-Some application-level errors (such as a missing entry) now return an HTTP `200` status code while populating `error` in `info`. Always check both the HTTP status code and the `error` field when handling responses.
+Some application-level errors (such as a missing entry) now return an HTTP `200` status code and populate `error` and `message` in `info`. Always check both the HTTP status code and presence of the `error` field when handling responses. See [Error codes](https://mothdex.net/api-docs/#error-codes) for the full reference.
